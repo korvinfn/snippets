@@ -133,19 +133,24 @@ let new_foo (policy : (module MT_policy)) =
   let module F = Foo (val policy) in
   new F.t
 
+type 'a finalizable =
+  < finalize : unit
+  ; .. > as 'a
+
+let using : 'a finalizable -> ('a -> unit) -> unit
+  = fun res f ->
+    f res ;
+    res #finalize
 
 let _ =
-  let private_foo    = new_foo (module CT_sync) in
-  let shared_foo     = new_foo (module MX_sync) in
-  let up_to_f_ck_foo = new_foo (module No_sync) in
+  using (new_foo (module CT_sync)) @@ fun private_foo ->
+  using (new_foo (module MX_sync)) @@ fun shared_foo ->
+  using (new_foo (module No_sync)) @@ fun up_to_f_ck_foo ->
 
-  let foos = [
-    private_foo ;
-    shared_foo ;
-    up_to_f_ck_foo ;
-  ] in
+  print_endline "---- doing something..." ;
 
-  foos |> List.iter (fun x -> x # do_something) ;
-  foos |> List.iter (fun x -> x # finalize) ;
+  private_foo    # do_something ;
+  shared_foo     # do_something ;
+  up_to_f_ck_foo # do_something ;
 
-  print_endline ""
+  print_endline "---- finalizing..."
