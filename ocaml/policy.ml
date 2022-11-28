@@ -81,15 +81,15 @@ end
 
 module No_sync = struct
 
-  type t = T
+  type t = unit
 
   class handler = object
-    val handle = T
+    val handle = ()
     method finalize = ()
   end
 
-  let lock   T = print_endline "no lock"
-  let unlock T = print_endline "no unlock"
+  let lock   () = print_endline "no lock"
+  let unlock () = print_endline "no unlock"
 
 end
 
