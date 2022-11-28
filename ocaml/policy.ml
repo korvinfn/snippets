@@ -1,24 +1,31 @@
 
 module type MT_policy =
   sig
-    class t : object
-      method private lock   : unit
-      method private unlock : unit
+    type t
 
+    class handler : object
+      val handle : t
       method finalize : unit
     end
+
+    val lock   : t -> unit
+    val unlock : t -> unit
   end
 
+module Foo (Policy : MT_policy) : sig
+  class t : object
+    method do_something : unit
+    method finalize     : unit
+  end
+end = struct
 
-module Foo (Policy : MT_policy) = struct
-
-  class t = object (self)
-    inherit Policy.t
+  class t = object
+    inherit Policy.handler
 
     method do_something =
-      self #lock ;
+      Policy.lock handle ;
       print_endline "do something" ;
-      self #unlock
+      Policy.unlock handle
   end
 
 end
@@ -54,17 +61,17 @@ end
 
 
 module Mutex : sig
-  type handler
-  val create   : bool -> handler option
-  val wait_for : handler -> unit
-  val release  : handler -> unit
+  type t
+  val create   : unit -> t
+  val wait_for : t -> unit
+  val release  : t -> unit
 end = struct
 
-  type handler = HANDLER
+  type t = Mx
 
-  let create   broken  = if broken then None else Some HANDLER
-  let wait_for HANDLER = print_endline "Waiting for mutex..."
-  let release  HANDLER = print_endline "Release mutex"
+  let create   () = Mx
+  let wait_for Mx = print_endline "Waiting for mutex..."
+  let release  Mx = print_endline "Release mutex"
 
 end
 
@@ -74,44 +81,47 @@ end
 
 module No_sync = struct
 
-  class t = object
-    method private lock   = print_endline "no lock"
-    method private unlock = print_endline "no unlock"
+  type t = T
 
+  class handler = object
+    val handle = T
     method finalize = ()
   end
+
+  let lock   T = print_endline "no lock"
+  let unlock T = print_endline "no unlock"
 
 end
 
 
 module CT_sync = struct
 
-  class t = object
-    val ct = CRITICAL_SECTION.define ()
+  type t = CRITICAL_SECTION.t
 
-    method private lock   = CRITICAL_SECTION.enter ct
-    method private unlock = CRITICAL_SECTION.leave ct
-
-    method finalize = CRITICAL_SECTION.delete ct
+  class handler = object
+    val handle = CRITICAL_SECTION.define ()
+    method finalize = CRITICAL_SECTION.delete handle
   initializer
-    CRITICAL_SECTION.initialize ct
+    CRITICAL_SECTION.initialize handle
   end
+
+  let lock   = CRITICAL_SECTION.enter
+  let unlock = CRITICAL_SECTION.leave
 
 end
 
 
 module MX_sync = struct
 
-  class t = object
-    val h_mux = ( match Mutex.create false with
-                | Some h -> h
-                | None   -> failwith "Can't create mutex" )
+  type t = Mutex.t
 
-    method private lock   = Mutex.wait_for h_mux
-    method private unlock = Mutex.release h_mux
-
+  class handler = object
+    val handle = Mutex.create ()
     method finalize = ()
   end
+
+  let lock   = Mutex.wait_for
+  let unlock = Mutex.release
 
 end
 
